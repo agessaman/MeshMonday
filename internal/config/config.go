@@ -45,8 +45,14 @@ const publicChannelKeyHex = "8b3387e9c5cdea6ac9e5edbaa115cd72"
 var diceBearStyleSlugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 func Load() (Config, error) {
+	tz := getEnv("TZ", "America/Los_Angeles")
+	loc, locErr := time.LoadLocation(tz)
+	if locErr != nil {
+		loc = time.UTC
+	}
+
 	trackFromRaw := getEnv("TRACK_FROM_DATE", "2026-01-05")
-	trackFrom, err := time.Parse(dateOnlyFormat, trackFromRaw)
+	trackFrom, err := time.ParseInLocation(dateOnlyFormat, trackFromRaw, loc)
 	if err != nil {
 		return Config{}, fmt.Errorf("parse TRACK_FROM_DATE: %w", err)
 	}
@@ -89,7 +95,7 @@ func Load() (Config, error) {
 		IATADefault:          strings.ToUpper(getEnv("IATA_DEFAULT", "SEA")),
 		IATAFilters:          parseIATAFilters(getEnv("IATA_FILTERS", ""), strings.ToUpper(getEnv("IATA_DEFAULT", "SEA"))),
 		TrackFromDate:        trackFrom,
-		TZ:                   getEnv("TZ", "America/Los_Angeles"),
+		TZ:                   tz,
 		SQLitePath:           getEnv("SQLITE_PATH", "./data/meshmonday_dev.db"),
 		MQTTBrokerURL:        getEnv("MQTT_BROKER_URL", "tcp://localhost:1883"),
 		MQTTTopicTemplate:    getEnv("MQTT_TOPIC_TEMPLATE", "meshcore/+/+/packets"),

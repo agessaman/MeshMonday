@@ -8,21 +8,25 @@
 </head>
 <body data-poll-seconds="{{.UIPollSeconds}}">
   <main class="page">
-    <header class="hero">
-      <div>
+    <header class="hero hero-leaderboard">
+      <div class="hero-title-block">
         <p class="eyebrow">{{.MeshName}}</p>
         <h1>MeshMonday Leaderboard</h1>
-        <p class="subtitle">Tracking from {{.TrackedFrom}}</p>
       </div>
-      <nav class="nav">
+      <p class="subtitle">Tracking from {{.TrackedFrom}}</p>
+      <nav class="nav hero-leaderboard-nav">
         <a href="/">Check-ins</a>
         <a href="/leaderboard">Leaderboard</a>
       </nav>
+      <label class="leaderboard-search-label">
+        <span class="sr-only">Filter leaderboard by name</span>
+        <input type="search" id="leaderboard-filter" class="leaderboard-search" placeholder="Search people…" autocomplete="off" spellcheck="false">
+      </label>
     </header>
 
     <section class="board">
       {{range .Entries}}
-      <article class="board-row">
+      <article class="board-row" data-username="{{.Username}}" data-display-name="{{.DisplayName}}">
         <div class="board-user">
           <img src="https://api.dicebear.com/9.x/{{$.DiceBearStyle}}/svg?seed={{.Username}}" alt="{{.DisplayName}} avatar" loading="lazy">
           <div>
@@ -31,13 +35,13 @@
         </div>
         <div class="rings">
           <div class="ring-wrap">
-            <div class="ring most" style="--ring-value: {{.MostCheckins}};">
+            <div class="ring most" style="--ring-fill-pct: {{leaderboardRingFill .MostCheckins .SeasonWeeks}};">
               <span>{{.MostCheckins}}</span>
             </div>
-            <small>Most Check-ins</small>
+            <small class="ring-label-total">Total<br>Checkins</small>
           </div>
           <div class="ring-wrap">
-            <div class="ring streak" style="--ring-value: {{.LongestStreak}};">
+            <div class="ring streak" style="--ring-fill-pct: {{leaderboardRingFill .LongestStreak .SeasonWeeks}};">
               <span>{{.LongestStreak}}</span>
             </div>
             <small>Longest Streak<br>{{.StreakStartDate}}</small>
@@ -45,8 +49,9 @@
         </div>
       </article>
       {{else}}
-      <p class="empty">No leaderboard data yet.</p>
+      <p class="empty board-server-empty">No leaderboard data yet.</p>
       {{end}}
+      <p class="empty board-filter-empty" hidden>No names match your search.</p>
     </section>
   </main>
   <script src="/static/app.js"></script>

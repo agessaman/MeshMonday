@@ -36,6 +36,7 @@ type LeaderboardEntry struct {
 	Username        string `json:"username"`
 	DisplayName     string `json:"display_name"`
 	MostCheckins    int    `json:"most_checkins"`
+	SeasonWeeks     int    `json:"season_weeks"`
 	TrackedFrom     string `json:"tracked_from"`
 	LongestStreak   int    `json:"longest_streak"`
 	StreakStartDate string `json:"streak_start_date"`

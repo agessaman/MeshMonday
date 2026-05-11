@@ -85,5 +85,14 @@ Backup helper: `scripts/backup_sqlite.sh`.
 - **`raw_packets` vs `packet_observations`**: the first stores each distinct packet payload (large hex blobs). The second stores which observer gateway reported each `(packet_hash, observer)` pair for Mesh Monday check-in observer badges—not duplicate payloads. Both tables shrink when `raw_packets` rows are deleted (FK cascade); the file still needs `VACUUM` to give disk space back.
 - After a large prune, compact on disk: `make vacuum` (uses `SQLITE_PATH` from your env file). Run during a low-traffic window; `VACUUM` needs temporary disk headroom roughly the size of the database.
 
+### Migrating check-ins to a new production database
+Yes. Canonical rows live in `checkins`; those rows foreign-key to `raw_packets(packet_hash)`, and `checkin_packets` / `packet_observations` hang off the same hashes. Export everything needed in FK order:
+
+1. Create the destination database with the **same app version** (run the server once against `SQLITE_PATH`, or apply the same schema), and **stop** the server before importing so nothing else writes the file.
+2. From the old database: `./scripts/export_checkins_bundle.sh ./data/old.db > checkins_bundle.sql`  
+   This pulls `raw_packets` rows referenced by check-ins, all `checkins`, `checkin_packets`, and matching `packet_observations` (for observer badges).
+3. Import: `sqlite3 ./data/new.db < checkins_bundle.sql`
+4. `leaderboard_snapshots` is not exported; the leaderboard API recomputes from `checkins` when loaded. If you added **custom tables** locally (not in this repo), copy those separately.
+
 Example nightly cron:
 `0 2 * * * cd /opt/meshmonday && ./scripts/backup_sqlite.sh ./data/meshmonday_prod.db ./backups`

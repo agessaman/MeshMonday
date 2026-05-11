@@ -31,7 +31,8 @@ const weekDateLayout = "2006-01-02"
 
 func NewServer(cfg config.Config, store *storage.SQLiteStore, logger *slog.Logger) (*Server, error) {
 	tmpl, err := template.New("").Funcs(template.FuncMap{
-		"observerTooltip": observerTooltip,
+		"observerTooltip":     observerTooltip,
+		"leaderboardRingFill": leaderboardRingFill,
 	}).ParseGlob(filepath.Join("web", "templates", "*.html"))
 	if err != nil {
 		return nil, err
@@ -42,6 +43,17 @@ func NewServer(cfg config.Config, store *storage.SQLiteStore, logger *slog.Logge
 		logger:    logger,
 		templates: tmpl,
 	}, nil
+}
+
+func leaderboardRingFill(checkins, trackedWeeks int) int {
+	if trackedWeeks <= 0 {
+		return 0
+	}
+	p := (checkins * 100) / trackedWeeks
+	if p > 100 {
+		return 100
+	}
+	return p
 }
 
 func observerTooltip(count int, names []string) string {
@@ -222,7 +234,7 @@ func (s *Server) computeLeaderboard(ctx context.Context) ([]models.LeaderboardEn
 	if err != nil {
 		return nil, err
 	}
-	entries := leaderboard.Compute(checkinRows, s.cfg.TrackFromDate)
+	entries := leaderboard.Compute(checkinRows, s.cfg.TrackFromDate, time.Now(), s.cfg.TZ)
 	if err := s.store.ReplaceLeaderboardSnapshots(ctx, s.cfg.TrackFromDate, entries, time.Now().UTC()); err != nil {
 		s.logger.Warn("replace leaderboard snapshots failed", "error", err.Error())
 	}
