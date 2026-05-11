@@ -3,7 +3,7 @@ SHELL := /bin/zsh
 ENV_FILE := .env.local
 FIXTURE ?= fixtures/mqtt/monday-sea.jsonl
 
-.PHONY: setup run dev build test test-integration lint dev-seed replay-checkins restore-checkin-packets clean
+.PHONY: setup run dev build test test-integration lint dev-seed replay-checkins restore-checkin-packets vacuum clean
 
 setup:
 	@mkdir -p data bin
@@ -41,6 +41,9 @@ replay-checkins: setup
 
 restore-checkin-packets: setup
 	@set -a; source $(ENV_FILE); set +a; go run ./cmd/restorecheckinpackets
+
+vacuum: setup
+	@set -a; source $(ENV_FILE); set +a; sqlite3 "$$SQLITE_PATH" 'VACUUM;'
 
 clean:
 	@rm -rf ./bin ./data/*_test.db

@@ -1,11 +1,16 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestChannelSecretKeysIncludesPublicDerivedAndPrivate(t *testing.T) {
 	cfg := Config{
-		HashtagChannels:    []string{"#bot", "seattle"},
-		PrivateChannelKeys: []string{"00112233445566778899aabbccddeeff"},
+		HashtagChannels:      []string{"#bot", "seattle"},
+		PrivateChannelKeys:   []string{"00112233445566778899aabbccddeeff"},
+		RawMondayRetainWeeks: 12,
+		RetentionInterval:    time.Hour,
 	}
 	keys := cfg.ChannelSecretKeys()
 
@@ -26,14 +31,16 @@ func TestChannelSecretKeysIncludesPublicDerivedAndPrivate(t *testing.T) {
 
 func TestValidateDiceBearStyle(t *testing.T) {
 	cfg := Config{
-		MeshName:            "CascadiaMesh",
-		DiceBearStyle:       "rings",
-		UIPollSeconds:       15,
-		IATADefault:         "SEA",
-		MQTTTopicTemplate:   "meshcore/+/+/packets",
-		MQTTMaxPayloadBytes: 16384,
-		IngestMaxPacketHex:  8192,
-		IngestMaxObserver:   64,
+		MeshName:             "CascadiaMesh",
+		DiceBearStyle:        "rings",
+		UIPollSeconds:        15,
+		IATADefault:          "SEA",
+		MQTTTopicTemplate:    "meshcore/+/+/packets",
+		MQTTMaxPayloadBytes:  16384,
+		IngestMaxPacketHex:   8192,
+		IngestMaxObserver:    64,
+		RawMondayRetainWeeks: 12,
+		RetentionInterval:    time.Hour,
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("expected valid config, got %v", err)
@@ -76,14 +83,16 @@ func TestParseIATAFilters(t *testing.T) {
 
 func TestValidateIngestLimits(t *testing.T) {
 	cfg := Config{
-		MeshName:            "CascadiaMesh",
-		DiceBearStyle:       "fun-emoji",
-		UIPollSeconds:       15,
-		IATADefault:         "SEA",
-		MQTTTopicTemplate:   "meshcore/+/+/packets",
-		MQTTMaxPayloadBytes: 255,
-		IngestMaxPacketHex:  8192,
-		IngestMaxObserver:   64,
+		MeshName:             "CascadiaMesh",
+		DiceBearStyle:        "fun-emoji",
+		UIPollSeconds:        15,
+		IATADefault:          "SEA",
+		MQTTTopicTemplate:    "meshcore/+/+/packets",
+		MQTTMaxPayloadBytes:  255,
+		IngestMaxPacketHex:   8192,
+		IngestMaxObserver:    64,
+		RawMondayRetainWeeks: 12,
+		RetentionInterval:    time.Hour,
 	}
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected MQTT_MAX_PAYLOAD_BYTES validation to fail")
@@ -99,5 +108,37 @@ func TestValidateIngestLimits(t *testing.T) {
 	cfg.IngestMaxObserver = 7
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("expected INGEST_MAX_OBSERVER_KEY_CHARS validation to fail")
+	}
+}
+
+func TestValidateRetentionSettings(t *testing.T) {
+	cfg := Config{
+		MeshName:             "CascadiaMesh",
+		DiceBearStyle:        "rings",
+		UIPollSeconds:        15,
+		IATADefault:          "SEA",
+		MQTTTopicTemplate:    "meshcore/+/+/packets",
+		MQTTMaxPayloadBytes:  16384,
+		IngestMaxPacketHex:   8192,
+		IngestMaxObserver:    64,
+		RawMondayRetainWeeks: 12,
+		RetentionInterval:    time.Hour,
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected valid: %v", err)
+	}
+
+	cfg.RawMondayRetainWeeks = -1
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected negative RAW_MONDAY_RETAIN_WEEKS to fail")
+	}
+	cfg.RawMondayRetainWeeks = 1041
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected excessive RAW_MONDAY_RETAIN_WEEKS to fail")
+	}
+	cfg.RawMondayRetainWeeks = 0
+	cfg.RetentionInterval = 0
+	if err := cfg.Validate(); err == nil {
+		t.Fatal("expected zero RETENTION_INTERVAL to fail")
 	}
 }

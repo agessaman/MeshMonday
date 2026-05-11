@@ -54,6 +54,10 @@ func main() {
 
 	httpServer := newHTTPServer(cfg.HTTPAddr, webServer.Routes())
 
+	retentionCtx, stopRetention := context.WithCancel(context.Background())
+	defer stopRetention()
+	go runRetentionLoop(retentionCtx, store, cfg, logger)
+
 	ingestService := ingest.NewService(cfg, store, logger)
 	mqttConsumer := mqtt.NewConsumer(
 		logger,
@@ -81,7 +85,7 @@ func main() {
 		}
 	}()
 
-	waitForShutdown(logger, httpServer)
+	waitForShutdown(logger, httpServer, stopRetention)
 }
 
 func newHTTPServer(addr string, handler http.Handler) *http.Server {
@@ -110,10 +114,61 @@ func connectMQTTWithRetry(logger *slog.Logger, consumer *mqtt.Consumer) {
 	}
 }
 
-func waitForShutdown(logger *slog.Logger, httpServer *http.Server) {
+func runRetentionLoop(ctx context.Context, store *storage.SQLiteStore, cfg config.Config, logger *slog.Logger) {
+	jitter := time.Duration(5+time.Now().UnixNano()%21) * time.Second
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(jitter):
+	}
+
+	ticker := time.NewTicker(cfg.RetentionInterval)
+	defer ticker.Stop()
+
+	runOnce := func() {
+		n, err := store.PruneRawPackets(ctx, time.Now().UTC(), cfg.TZ, cfg.RawMondayRetainWeeks)
+		if err != nil {
+			logger.Error("raw packet retention prune failed", "error", err.Error())
+			return
+		}
+		if n == 0 {
+			logger.Debug("raw packet retention prune complete", "deleted", n)
+			return
+		}
+		st, statErr := store.AfterPruneMaintenance(ctx)
+		logArgs := []any{"deleted", n}
+		if statErr != nil {
+			logArgs = append(logArgs, "space_stats_error", statErr.Error())
+		} else {
+			logArgs = append(logArgs,
+				"freelist_pages", st.FreelistCount,
+				"freelist_mib", float64(st.FreelistBytes)/(1024*1024),
+				"db_file_mib", float64(st.FileSizeBytes)/(1024*1024),
+				"wal_mib", float64(st.WALSizeBytes)/(1024*1024),
+			)
+		}
+		if n >= storage.VacuumHintThreshold() || (statErr == nil && st.FreelistBytes > 50*1024*1024) {
+			logArgs = append(logArgs, "shrink_hint", "SQLite keeps freed pages in the file until VACUUM; run make vacuum during maintenance. WAL was checkpointed to trim -wal if possible.")
+		}
+		logger.Info("raw packet retention prune complete", logArgs...)
+	}
+
+	runOnce()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			runOnce()
+		}
+	}
+}
+
+func waitForShutdown(logger *slog.Logger, httpServer *http.Server, stopRetention context.CancelFunc) {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 	<-stop
+	stopRetention()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

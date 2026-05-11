@@ -79,6 +79,11 @@ Backup helper: `scripts/backup_sqlite.sh`.
 - Rebuild `checkin_packets` from `raw_packets` with current parsing/decryption rules:
   - `make restore-checkin-packets`
 - This is useful after schema cleanup or if packet-link rows were lost.
+- Raw packet retention runs inside the server process (`RAW_MONDAY_RETAIN_WEEKS`, `RETENTION_INTERVAL_MINUTES`). Checkins and linked rows are always kept; ambient mesh traffic is trimmed to recent Mondays in `TZ`.
+- SQLite connections use a 30s `busy_timeout` on every pooled connection so MQTT inserts wait briefly instead of failing while retention deletes run.
+- **`DELETE` does not shrink the `.db` file**: freed pages go on SQLite’s freelist inside the file; the OS sees the same size until you run `VACUUM` (or rebuild). Retention logs `freelist_mib` after each prune so you can see how much space is logically free but still inside the file. The server runs a WAL checkpoint after pruning to trim the `-wal` sidecar when possible.
+- **`raw_packets` vs `packet_observations`**: the first stores each distinct packet payload (large hex blobs). The second stores which observer gateway reported each `(packet_hash, observer)` pair for Mesh Monday check-in observer badges—not duplicate payloads. Both tables shrink when `raw_packets` rows are deleted (FK cascade); the file still needs `VACUUM` to give disk space back.
+- After a large prune, compact on disk: `make vacuum` (uses `SQLITE_PATH` from your env file). Run during a low-traffic window; `VACUUM` needs temporary disk headroom roughly the size of the database.
 
 Example nightly cron:
 `0 2 * * * cd /opt/meshmonday && ./scripts/backup_sqlite.sh ./data/meshmonday_prod.db ./backups`

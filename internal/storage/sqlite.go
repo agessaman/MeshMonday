@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -25,25 +26,27 @@ type RawPacketRestoreRow struct {
 	ObservedAt time.Time
 }
 
+// sqliteDSN sets PRAGMAs on every pooled connection (modernc.org/sqlite).
+// A single db.Exec(PRAGMA ...) after Open only affects one connection, which
+// caused SQLITE_BUSY during concurrent retention deletes.
+func sqliteDSN(path string) string {
+	q := url.Values{}
+	q.Add("_pragma", "busy_timeout=30000")
+	q.Add("_pragma", "journal_mode=WAL")
+	q.Add("_pragma", "foreign_keys=ON")
+	return path + "?" + q.Encode()
+}
+
 func OpenSQLite(path string) (*SQLiteStore, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, fmt.Errorf("create sqlite dir: %w", err)
 	}
-	db, err := sql.Open("sqlite", path)
+	db, err := sql.Open("sqlite", sqliteDSN(path))
 	if err != nil {
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 	db.SetMaxOpenConns(4)
 	db.SetMaxIdleConns(2)
-	if _, err := db.Exec("PRAGMA journal_mode=WAL;"); err != nil {
-		return nil, fmt.Errorf("enable wal: %w", err)
-	}
-	if _, err := db.Exec("PRAGMA foreign_keys=ON;"); err != nil {
-		return nil, fmt.Errorf("enable foreign_keys: %w", err)
-	}
-	if _, err := db.Exec("PRAGMA busy_timeout=5000;"); err != nil {
-		return nil, fmt.Errorf("set busy timeout: %w", err)
-	}
 	store := &SQLiteStore{db: db}
 	if err := store.Migrate(context.Background()); err != nil {
 		return nil, err
@@ -133,6 +136,7 @@ CREATE INDEX IF NOT EXISTS idx_snapshots_metric_computed ON leaderboard_snapshot
 CREATE INDEX IF NOT EXISTS idx_packet_observations_packet_hash ON packet_observations (packet_hash);
 CREATE INDEX IF NOT EXISTS idx_checkin_packets_week_user ON checkin_packets (week_start, username);
 CREATE INDEX IF NOT EXISTS idx_checkin_packets_packet_hash ON checkin_packets (packet_hash);
+CREATE INDEX IF NOT EXISTS idx_raw_packets_observed_at ON raw_packets (observed_at);
 
 -- Backfill link table from existing canonical checkins.
 INSERT OR IGNORE INTO checkin_packets (week_start, username, packet_hash, created_at)

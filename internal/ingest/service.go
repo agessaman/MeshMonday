@@ -32,8 +32,8 @@ type RestoreCheckinPacketsResult struct {
 }
 
 const (
-	busyRetryAttempts        = 3
-	busyRetryDelay           = 40 * time.Millisecond
+	busyRetryAttempts        = 15
+	busyRetryDelay           = 50 * time.Millisecond
 	defaultMaxPacketHexChars = 8192
 	defaultMaxObserverChars  = 64
 )

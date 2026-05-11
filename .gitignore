@@ -4,3 +4,6 @@ bin/
 data/
 backups/
 *.db
+.DS_Store
+tmp/*
+tmp/*.log
